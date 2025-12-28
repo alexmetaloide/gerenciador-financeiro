@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
           theme_color: '#ffffff',
           background_color: '#ffffff',
           display: 'standalone',
-          start_url: '/',
+          start_url: '/gerenciador-financeiro/',
           icons: [
             {
               src: 'pwa-192x192.png',

@@ -37,10 +37,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const signInWithGoogle = async () => {
         try {
+            // Get the base URL including any subpath (important for GitHub Pages)
+            const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/');
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: window.location.origin, // Redirects back to the app after Google login
+                    redirectTo: baseUrl, // Redirects back to the app after Google login
                 },
             });
             if (error) throw error;
