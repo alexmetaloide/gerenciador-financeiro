@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase, Transaction, Wallet } from '../services/supabase';
+import { Transaction, Wallet } from '../types';
 
 interface FinanceContextType {
     transactions: Transaction[];
@@ -8,15 +8,23 @@ interface FinanceContextType {
     balance: number;
     income: number;
     expense: number;
-    fetchTransactions: () => Promise<void>;
-    addTransaction: (transaction: Omit<Transaction, 'id' | 'created_at'>) => Promise<void>;
-    deleteTransaction: (id: string) => Promise<void>;
-    fetchWallets: () => Promise<void>;
-    addWallet: (wallet: Omit<Wallet, 'id' | 'created_at'>) => Promise<void>;
-    deleteWallet: (id: string) => Promise<void>;
+    fetchTransactions: () => void;
+    addTransaction: (transaction: Omit<Transaction, 'id' | 'created_at'>) => void;
+    deleteTransaction: (id: string) => void;
+    fetchWallets: () => void;
+    addWallet: (wallet: Omit<Wallet, 'id' | 'created_at'>) => void;
+    deleteWallet: (id: string) => void;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
+
+const TRANSACTIONS_KEY = 'finance_transactions';
+const WALLETS_KEY = 'finance_wallets';
+
+// Helper function to generate unique IDs
+const generateId = () => {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+};
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -35,103 +43,73 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         .filter(t => t.type === 'expense')
         .reduce((acc, curr) => acc + Number(curr.amount), 0);
 
-    const fetchTransactions = async () => {
+    const fetchTransactions = () => {
         try {
-            const { data, error } = await supabase
-                .from('expenses') // Using 'expenses' table for transactions based on previous context
-                .select('*')
-                .order('date', { ascending: false });
-
-            if (error) throw error;
-            setTransactions(data || []);
+            const stored = localStorage.getItem(TRANSACTIONS_KEY);
+            if (stored) {
+                const parsed = JSON.parse(stored) as Transaction[];
+                // Sort by date descending
+                parsed.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                setTransactions(parsed);
+            }
         } catch (error) {
-            console.error('Error fetching transactions:', error);
+            console.error('Error loading transactions:', error);
         }
     };
 
-    const addTransaction = async (transaction: Omit<Transaction, 'id' | 'created_at'>) => {
-        try {
-            const { data, error } = await supabase
-                .from('expenses')
-                .insert([transaction])
-                .select()
-                .single();
+    const addTransaction = (transaction: Omit<Transaction, 'id' | 'created_at'>) => {
+        const newTransaction: Transaction = {
+            ...transaction,
+            id: generateId(),
+            created_at: new Date().toISOString(),
+        };
 
-            if (error) throw error;
-            setTransactions(prev => [data, ...prev]);
+        const updated = [newTransaction, ...transactions];
+        setTransactions(updated);
+        localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(updated));
+    };
+
+    const deleteTransaction = (id: string) => {
+        const updated = transactions.filter(t => t.id !== id);
+        setTransactions(updated);
+        localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(updated));
+    };
+
+    const fetchWallets = () => {
+        try {
+            const stored = localStorage.getItem(WALLETS_KEY);
+            if (stored) {
+                const parsed = JSON.parse(stored) as Wallet[];
+                setWallets(parsed);
+            }
         } catch (error) {
-            console.error('Error adding transaction:', error);
-            throw error;
+            console.error('Error loading wallets:', error);
         }
     };
 
-    const deleteTransaction = async (id: string) => {
-        try {
-            const { error } = await supabase
-                .from('expenses')
-                .delete()
-                .eq('id', id);
+    const addWallet = (wallet: Omit<Wallet, 'id' | 'created_at'>) => {
+        const newWallet: Wallet = {
+            ...wallet,
+            id: generateId(),
+            created_at: new Date().toISOString(),
+        };
 
-            if (error) throw error;
-            setTransactions(prev => prev.filter(t => t.id !== id));
-        } catch (error) {
-            console.error('Error deleting transaction:', error);
-            throw error;
-        }
+        const updated = [...wallets, newWallet];
+        setWallets(updated);
+        localStorage.setItem(WALLETS_KEY, JSON.stringify(updated));
     };
 
-    const fetchWallets = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('wallets')
-                .select('*')
-                .order('created_at', { ascending: true });
-
-            if (error) throw error;
-            setWallets(data || []);
-        } catch (error) {
-            console.error('Error fetching wallets:', error);
-        }
-    };
-
-    const addWallet = async (wallet: Omit<Wallet, 'id' | 'created_at'>) => {
-        try {
-            const { data, error } = await supabase
-                .from('wallets')
-                .insert([wallet])
-                .select()
-                .single();
-
-            if (error) throw error;
-            setWallets(prev => [...prev, data]);
-        } catch (error) {
-            console.error('Error adding wallet:', error);
-            throw error;
-        }
-    };
-
-    const deleteWallet = async (id: string) => {
-        try {
-            const { error } = await supabase
-                .from('wallets')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
-            setWallets(prev => prev.filter(w => w.id !== id));
-        } catch (error) {
-            console.error('Error deleting wallet:', error);
-            throw error;
-        }
+    const deleteWallet = (id: string) => {
+        const updated = wallets.filter(w => w.id !== id);
+        setWallets(updated);
+        localStorage.setItem(WALLETS_KEY, JSON.stringify(updated));
     };
 
     useEffect(() => {
-        const init = async () => {
-            setLoading(true);
-            await Promise.all([fetchTransactions(), fetchWallets()]);
-            setLoading(false);
-        };
-        init();
+        setLoading(true);
+        fetchTransactions();
+        fetchWallets();
+        setLoading(false);
     }, []);
 
     return (
